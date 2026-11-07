@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mahika Productivity App</title>
+  <meta name="description" content="A gentle, illustrated personal productivity journal.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 30V16' stroke='%236a54a6' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpath d='M16 18C10 18 6 13 6 8c6 0 10 4 10 10zM16 15c0-6 4-10 10-10 0 6-4 10-10 10z' fill='%23a593d6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+  <script>try { if ((JSON.parse(localStorage.getItem("productivityApp.v1")) || {}).settings.darkMode) document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
+</head>
+<body>
+  <a class="skip-link" href="#view">Skip to content</a>
+  <div class="app">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <div class="brand-name">Mahika</div>
+          <div class="brand-sub">Productivity App</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div id="bk-side"></div>
+      <div class="save-note" id="save-note" aria-live="polite">All changes saved</div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="clocks" id="clocks" aria-label="Current time"></div>
+        <div class="ws-switch" role="group" aria-label="Show workspace" id="ws-switch"></div>
+        <div class="status-switch" role="group" aria-label="Work status" id="status-switch"></div>
+        <button class="theme-btn" id="theme-btn" data-act="theme-toggle" aria-label="Switch to dark mode"></button>
+        <button class="btn btn-primary btn-add" data-act="quick-add" title="Add a task (press N)">
+          <span aria-hidden="true">+</span> <span class="hide-sm">Add task</span>
+        </button>
+      </header>
+      <main id="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <div id="companion" class="companion state-idle" aria-live="polite">
+    <div class="bubble" id="bubble" role="status"></div>
+    <button class="companion-hide" data-act="hide-companion" aria-label="Hide companion">×</button>
+    <button class="companion-btn" data-act="poke-companion" aria-label="Ask your companion for encouragement" id="companion-art"></button>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+
+  <script src="js/core.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/garden-art.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/calendar.js"></script>
+  <script src="js/meetings.js"></script>
+  <script src="js/content.js"></script>
+  <script src="js/finance.js"></script>
+  <script src="js/notes.js"></script>
+  <script src="js/bloomkin.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

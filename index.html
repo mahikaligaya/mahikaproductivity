@@ -1145,6 +1145,26 @@ html[data-theme="dark"] .view-garden .g-num { color: var(--ink); }
 @media (max-width: 1100px) { .clocks .ck-st { display: none; } }
 @media (max-width: 860px) { .topbar .clocks { width: auto; order: -1; margin: 0 auto 0 0; } .topbar { justify-content: flex-start; } }
 
+/* ---------- Compact top bar on phones: row 1 clock + buttons, row 2 switches ---------- */
+@media (max-width: 860px) {
+  .topbar { gap: 8px; padding: 8px 12px; justify-content: flex-start; }
+  .topbar .clocks { order: 1; flex: 1 1 auto; min-width: 0; margin: 0; padding: 5px 12px; gap: 8px; justify-content: center; }
+  .topbar .clocks .ck-t { font-size: 1rem; }
+  .topbar .clocks .ck i { display: none; }
+  .topbar .theme-btn { order: 2; width: 34px; height: 34px; }
+  .topbar .btn-add { order: 3; padding: 0 12px; height: 34px; }
+  .topbar .ws-switch { order: 4; flex: none; }
+  .topbar .status-switch { order: 5; flex: 1 1 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .topbar .status-switch::-webkit-scrollbar { display: none; }
+  .topbar .seg, .topbar .status-btn { padding: 5px 9px; font-size: .78rem; white-space: nowrap; }
+}
+@media (max-width: 400px) { .topbar .status-btn i { display: none; } .topbar .seg, .topbar .status-btn { padding: 5px 7px; font-size: .74rem; } .topbar { gap: 6px; } }
+
+/* ---------- Sync card ---------- */
+.card-sync .row { gap: 8px; flex-wrap: wrap; }
+.sync-warn { color: var(--rose-deep); font-weight: 600; }
+.card-sync input { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: .9rem; }
+
 </style>
   <script>try { if ((JSON.parse(localStorage.getItem("productivityApp.v1")) || {}).settings.darkMode) document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
 </head>
@@ -2354,9 +2374,10 @@ function V_settings() {
           <label class="field"><span>Monthly stretch</span><input type="number" min="0" max="500" data-setting="leadMonthlyStretch" value="${s.leadMonthlyStretch}"></label>
         </div>
       </article>
+      ${typeof syncCard === "function" ? syncCard() : ""}
       <article class="card card-backup">
         <header class="card-head"><h2>Your data & backups</h2></header>
-        <p class="small">Everything is saved automatically inside this browser on this Mac — nothing is sent anywhere. A backup file is your safety net if browser data is ever cleared.</p>
+        <p class="small">Everything is saved automatically inside this browser. Nothing leaves this device unless you turn on sync above. A backup file is your safety net if browser data is ever cleared.</p>
         <p class="small muted">Last backup: <b>${last}</b></p>
         <div class="row"><button class="btn btn-primary" data-act="export">${icon('download')} Download backup</button><button class="btn btn-ghost" data-act="import">${icon('upload')} Restore from backup</button></div>
       </article>
@@ -4164,6 +4185,143 @@ function bkNudge() {
   if (nx > 5) return null;
   return nx === 1 ? 'Shall we find the first lead together? It makes me twirl ✦' : nx === 3 ? 'One more lead and I get a little gift ♡' : nx === 4 ? 'Lead number four unlocks something new to wear!' : nx === 5 ? 'Goal met! A fifth lead is optional — it adds a garden decoration.' : 'One more lead makes magical flowers bloom ✿';
 }
+
+</script>
+  <script>
+'use strict';
+/* =========================================================
+   SYNC — keeps Mac and phone in step through ONE secret
+   GitHub gist (file "mahika-sync.json") on your own account.
+   - Your key (token) stays in this browser only: never in
+     the gist, in backups, or in the code.
+   - Pulls when the app opens / comes back to the front;
+     pushes a few seconds after a real change.
+   - If both devices changed, it asks — nothing is silently lost
+     (the replaced copy is kept aside in this browser).
+   ========================================================= */
+const SYNC_KEY = 'productivityApp.sync', SYNC_FILE = 'mahika-sync.json', GH = 'https://api.github.com';
+const Sync = {
+  meta: (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch (_) { return {}; } })(),
+  busy: false, again: false, timer: null, status: '',
+  on() { return !!(this.meta.token && this.meta.gistId); },
+  keep() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(this.meta)); } catch (_) {} },
+  body(st) { const { lastSeen, ...rest } = st; return JSON.stringify(rest); },
+  hash(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = (h * 33 + str.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + ':' + str.length; },
+  async api(path, opts = {}) {
+    const r = await fetch(GH + path, { ...opts, headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + this.meta.token, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }, cache: 'no-store' });
+    if (r.status === 401 || r.status === 403) throw Object.assign(new Error('key'), { code: 'key' });
+    if (r.status === 404) throw Object.assign(new Error('gone'), { code: 'gone' });
+    if (!r.ok) throw new Error('http ' + r.status);
+    return r.json();
+  },
+  async readGist() {
+    const g = await this.api('/gists/' + this.meta.gistId), f = g.files[SYNC_FILE];
+    if (!f) throw Object.assign(new Error('gone'), { code: 'gone' });
+    const text = f.truncated ? await (await fetch(f.raw_url, { cache: 'no-store' })).text() : f.content;
+    return migrate(JSON.parse(text));
+  },
+  async push() {
+    const text = JSON.stringify(S);
+    await this.api('/gists/' + this.meta.gistId, { method: 'PATCH', body: JSON.stringify({ files: { [SYNC_FILE]: { content: text } } }) });
+    this.meta.base = this.hash(this.body(S)); this.done();
+  },
+  apply(remote) {
+    try { localStorage.setItem(STORE_KEY + '.before-sync', JSON.stringify(S)); } catch (_) {} // one rolling safety copy
+    const seen = S.lastSeen; S = remote; S.lastSeen = seen;
+    this.meta.base = this.hash(this.body(S)); quietSave = true; save(); quietSave = false;
+    this.done(); render(); if (typeof bkRefresh === 'function') bkRefresh();
+  },
+  done() { this.meta.lastSync = nowISO(); this.status = ''; this.keep(); this.paint(); },
+  fail(e) {
+    this.status = e.code === 'key' ? 'Your sync key isn’t working — check it in Settings.' : e.code === 'gone' ? 'The sync file wasn’t found — reconnect in Settings.' : 'Offline — will sync when you’re back online.';
+    this.paint();
+  },
+  /* Compare this device, the gist, and the last copy both agreed on. */
+  async run() {
+    if (!this.on()) return;
+    if (this.busy) { this.again = true; return; }
+    this.busy = true;
+    try {
+      const remote = await this.readGist();
+      const L = this.hash(this.body(S)), R = this.hash(this.body(remote)), B = this.meta.base;
+      if (L === R) { this.meta.base = L; this.done(); }
+      else if (R === B) await this.push();          // only this device changed
+      else if (L === B) { if ($('#modal-root').innerHTML) this.soon(15000); else this.apply(remote); } // only the other device changed (wait if a window is open)
+      else this.ask(remote);                        // both changed (or first connect)
+    } catch (e) { this.fail(e); }
+    this.busy = false;
+    if (this.again) { this.again = false; this.run(); }
+  },
+  soon(ms = 4000) { if (!this.on()) return; clearTimeout(this.timer); this.timer = setTimeout(() => this.run(), ms); },
+  ask(remote) {
+    Sync.pending = remote;
+    const n = st => (st.tasks || []).filter(t => !t.deletedAt).length, first = !this.meta.base;
+    openModal(`${modalHead(first ? 'Which data should this device use?' : 'Both devices have changes')}
+      <p>${first ? 'Synced data from your other device was found.' : 'This device and your other device were both changed since they last synced.'}</p>
+      <p class="small muted">Synced copy: ${n(remote)} tasks · This device: ${n(S)} tasks. The copy you don’t pick is kept aside in this browser, so nothing is lost.</p>
+      <footer class="modal-foot"><span class="spacer"></span>
+        <button class="btn btn-ghost" data-act="sync-keep-local">Keep this device’s</button>
+        <button class="btn btn-primary" data-act="sync-use-remote">Use the synced copy</button></footer>`);
+  },
+  paint() {
+    const n = $('#save-note'); if (n && this.on() && !this.status) n.textContent = 'Saved · synced';
+    const c = $('#sync-status'); if (c) c.innerHTML = syncStatusText();
+  },
+};
+function syncStatusText() {
+  if (!Sync.on()) return 'Not connected — this device keeps its own data.';
+  if (Sync.status) return `<span class="sync-warn">${esc(Sync.status)}</span>`;
+  return Sync.meta.lastSync ? `Connected · last synced ${relTime(Sync.meta.lastSync)}` : 'Connected';
+}
+
+/* Hook into every save: queue a sync only when real data changed (not the minute heartbeat). */
+{
+  const localSave = save;
+  save = function () { localSave(); if (Sync.on() && Sync.hash(Sync.body(S)) !== Sync.meta.base) Sync.soon(); };
+}
+
+/* ---------- Settings card ---------- */
+function syncCard() {
+  const on = Sync.on();
+  return `<article class="card card-sync">
+    <header class="card-head"><h2>${icon('reset')} Sync Mac & phone</h2></header>
+    <p class="small" id="sync-status">${syncStatusText()}</p>
+    ${on ? `<div class="row"><button class="btn btn-primary btn-sm" data-act="sync-now">Sync now</button><button class="btn btn-ghost btn-sm" data-act="sync-off">Disconnect this device</button></div>`
+    : `<p class="small muted">Paste your GitHub sync key (a token with only <b>Gists</b> access). Use the same key on each device. Your data goes into one secret gist on your GitHub; the key stays in this browser only.</p>
+    <form class="row" data-form="sync-connect"><input type="password" name="token" placeholder="github_pat_…" autocomplete="off" required style="flex:1;min-width:0"><button class="btn btn-primary btn-sm">Connect</button></form>`}
+  </article>`;
+}
+EXT_FORMS['sync-connect'] = async f => {
+  const token = f.token.value.trim(); if (!token) return;
+  Sync.meta = { token }; Sync.status = 'Connecting…'; Sync.paint();
+  try {
+    let page = 1, found = null;
+    while (!found && page <= 5) {
+      const list = await Sync.api(`/gists?per_page=100&page=${page}`);
+      found = list.find(g => g.files && g.files[SYNC_FILE]); if (list.length < 100) break; page++;
+    }
+    if (found) { Sync.meta.gistId = found.id; Sync.keep(); Sync.status = ''; render(); await Sync.run(); }
+    else {
+      const g = await Sync.api('/gists', { method: 'POST', body: JSON.stringify({ description: 'Mahika app sync (private data — do not share)', public: false, files: { [SYNC_FILE]: { content: JSON.stringify(S) } } }) });
+      Sync.meta.gistId = g.id; Sync.meta.base = Sync.hash(Sync.body(S)); Sync.done(); render(); toast('Sync is on. Now add the same key on your other device.');
+    }
+  } catch (e) { Sync.meta = {}; Sync.keep(); Sync.status = ''; render(); toast(e.code === 'key' ? 'That key didn’t work. Check it has Gists access (read and write).' : 'Couldn’t reach GitHub. Check your connection and try again.', { ms: 8000 }); }
+};
+Object.assign(EXT_ACT, {
+  'sync-now': () => { Sync.status = ''; Sync.run(); },
+  'sync-off': () => { Sync.meta = {}; Sync.keep(); localStorage.removeItem(SYNC_KEY); render(); toast('This device is no longer syncing. Its data stays here.'); },
+  'sync-use-remote': () => { const r = Sync.pending; Sync.pending = null; closeModal(); if (r) { Sync.apply(r); toast('Using the synced copy.'); } },
+  'sync-keep-local': async () => { Sync.pending = null; closeModal(); try { await Sync.push(); toast('This device’s data is now the synced copy.'); } catch (e) { Sync.fail(e); } },
+});
+
+/* ---------- when to sync ---------- */
+EXT_INIT.push(() => {
+  if (!Sync.on()) return;
+  Sync.run();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Sync.soon(300); });
+  window.addEventListener('online', () => Sync.soon(300));
+  setInterval(() => { if (document.visibilityState === 'visible') Sync.run(); }, 120000);
+});
 
 </script>
   <script>
